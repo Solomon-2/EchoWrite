@@ -8,9 +8,9 @@ import json
 from typing import Dict, Any, List
 from langchain.prompts import ChatPromptTemplate
 
-from config.llm_config import get_llm
-from services.content_extractor import get_youtube_transcript, scrape_webpage_text
-from services.rag_pipeline import rag_pipeline
+from ..config.llm_config import get_llm
+from ..services.content_extractor import get_youtube_transcript, scrape_website_text
+from ..services.rag_pipeline import rag_pipeline
 from .prompts import (
     CONTENT_EXTRACTION_ROUTER_PROMPT,
     INSIGHTS_EXTRACTION_PROMPT,
@@ -22,6 +22,114 @@ from .prompts import (
     RAG_QUERY_ARGUMENTS,
     RAG_QUERY_AUDIENCE_TONE
 )
+
+import json
+import asyncio
+from typing import Dict, Any, List
+from langchain_groq import ChatGroq
+from langchain.tools import tool
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain.prompts import ChatPromptTemplate
+
+from ..services.content_extractor import get_youtube_transcript, scrape_webpage_text
+from ..services.rag_pipeline import rag_pipeline
+from .prompts import (
+    CONTENT_EXTRACTION_ROUTER_PROMPT,
+    INSIGHTS_EXTRACTION_PROMPT,
+    BLOG_POST_GENERATION_PROMPT,
+    TWITTER_THREAD_GENERATION_PROMPT,
+    LINKEDIN_POST_GENERATION_PROMPT,
+    RAG_QUERY_THEMES,
+    RAG_QUERY_STATISTICS,
+    RAG_QUERY_ARGUMENTS,
+    RAG_QUERY_AUDIENCE_TONE
+)
+
+
+def get_llm():
+    """Get configured Groq LLM instance"""
+    return ChatGroq(
+        model="mixtral-8x7b-32768",
+        temperature=0.7,
+        max_tokens=4000
+    )
+
+
+def extract_content(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Content extraction router node.
+    Analyzes URL and chooses appropriate extraction tool.
+    """
+    state["current_step"] = "extracting_content"
+    
+    try:
+        url = state["url"]
+        
+        # Create agent with access to extraction tools
+        llm = get_llm()
+        tools = [get_youtube_transcript, scrape_website_text]
+        
+        # Create prompt template
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are a content extraction router. Choose and use the appropriate tool to extract content from the given URL."),
+            ("human", CONTENT_EXTRACTION_ROUTER_PROMPT.format(url=url)),
+            ("placeholder", "{agent_scratchpad}"),
+        ])
+        
+        # Create agent
+        agent = create_tool_calling_agent(llm, tools, prompt)
+        agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+        
+        # Execute extraction
+        result = agent_executor.invoke({"url": url})
+        
+        # Extract the content from the result
+        extracted_text = result["output"]
+        
+        # Determine extraction method based on URL
+        if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+            extraction_method = "youtube"
+        else:
+            extraction_method = "website"
+        
+        state["extracted_text"] = extracted_text
+        state["extraction_method"] = extraction_method
+        state["word_count"] = len(extracted_text.split()) if extracted_text else 0
+        
+    except Exception as e:
+        state["errors"].append(f"Content extraction failed: {str(e)}")
+        state["extracted_text"] = None
+    
+    return state
+
+import json
+import asyncio
+from typing import Dict, Any, List
+from langchain_groq import ChatGroq
+from langchain.prompts import ChatPromptTemplate
+
+from ..services.content_extractor import get_youtube_transcript, scrape_webpage_text
+from ..services.rag_pipeline import rag_pipeline
+from .prompts import (
+    CONTENT_EXTRACTION_ROUTER_PROMPT,
+    INSIGHTS_EXTRACTION_PROMPT,
+    BLOG_POST_GENERATION_PROMPT,
+    TWITTER_THREAD_GENERATION_PROMPT,
+    LINKEDIN_POST_GENERATION_PROMPT,
+    RAG_QUERY_THEMES,
+    RAG_QUERY_STATISTICS,
+    RAG_QUERY_ARGUMENTS,
+    RAG_QUERY_AUDIENCE_TONE
+)
+
+
+def get_llm():
+    """Get configured Groq LLM instance"""
+    return ChatGroq(
+        model="mixtral-8x7b-32768",
+        temperature=0.7,
+        max_tokens=4000
+    )
 
 
 def extract_content(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -198,13 +306,7 @@ def generate_content_suite(state: Dict[str, Any]) -> Dict[str, Any]:
         context_results = rag_pipeline.query_content(collection_id, "main content summary", n_results=5)
         context = "\n\n".join([r["content"] for r in context_results])
         
-        # Prepare insights variables
-        main_themes = ", ".join(insights.get("main_themes", []))
-        key_statistics = ", ".join(insights.get("key_statistics", []))
-        main_arguments = ", ".join(insights.get("main_arguments", []))
-        target_audience = insights.get("target_audience", "general audience")
-        content_type = insights.get("content_type", "informational")
-        tone = insights.get("tone", "neutral")
+        insights_str = json.dumps(insights, indent=2)
         
         # Generate all three content types
         llm = get_llm()
@@ -212,50 +314,26 @@ def generate_content_suite(state: Dict[str, Any]) -> Dict[str, Any]:
         # Blog post
         blog_prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert blog writer. Create engaging, well-structured long-form content."),
-            ("human", BLOG_POST_GENERATION_PROMPT)
+            ("human", BLOG_POST_GENERATION_PROMPT.format(insights=insights_str, context=context))
         ])
         blog_chain = blog_prompt | llm
-        blog_result = blog_chain.invoke({
-            "main_themes": main_themes,
-            "key_statistics": key_statistics,
-            "main_arguments": main_arguments,
-            "target_audience": target_audience,
-            "content_type": content_type,
-            "tone": tone,
-            "context": context
-        })
+        blog_result = blog_chain.invoke({"insights": insights_str, "context": context})
         
         # Twitter thread
         twitter_prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a social media expert. Create viral Twitter threads."),
-            ("human", TWITTER_THREAD_GENERATION_PROMPT)
+            ("human", TWITTER_THREAD_GENERATION_PROMPT.format(insights=insights_str, context=context))
         ])
         twitter_chain = twitter_prompt | llm
-        twitter_result = twitter_chain.invoke({
-            "main_themes": main_themes,
-            "key_statistics": key_statistics,
-            "main_arguments": main_arguments,
-            "target_audience": target_audience,
-            "content_type": content_type,
-            "tone": tone,
-            "context": context
-        })
+        twitter_result = twitter_chain.invoke({"insights": insights_str, "context": context})
         
         # LinkedIn post
         linkedin_prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a professional content creator. Create engaging LinkedIn posts."),
-            ("human", LINKEDIN_POST_GENERATION_PROMPT)
+            ("human", LINKEDIN_POST_GENERATION_PROMPT.format(insights=insights_str, context=context))
         ])
         linkedin_chain = linkedin_prompt | llm
-        linkedin_result = linkedin_chain.invoke({
-            "main_themes": main_themes,
-            "key_statistics": key_statistics,
-            "main_arguments": main_arguments,
-            "target_audience": target_audience,
-            "content_type": content_type,
-            "tone": tone,
-            "context": context
-        })
+        linkedin_result = linkedin_chain.invoke({"insights": insights_str, "context": context})
         
         # Parse Twitter thread into individual tweets
         twitter_content = twitter_result.content
