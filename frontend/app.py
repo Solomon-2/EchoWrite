@@ -4,7 +4,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 
 # Backend configuration
-BACKEND_BASE_URL = "http://127.0.0.1:8080"
+BACKEND_BASE_URL = "https://hammerhead-app-e3k8v.ondigitalocean.app"
 REPURPOSE_URL = f"{BACKEND_BASE_URL}/repurpose"
 AUTH_REGISTER_URL = f"{BACKEND_BASE_URL}/auth/register"
 AUTH_LOGIN_URL = f"{BACKEND_BASE_URL}/auth/login"
