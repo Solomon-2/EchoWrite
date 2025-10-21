@@ -89,3 +89,54 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Service status")
     version: str = Field(..., description="API version")
     timestamp: str = Field(..., description="Current timestamp")
+
+
+# Authentication schemas
+class RegisterRequest(BaseModel):
+    """User registration request"""
+    username: str = Field(..., min_length=3, max_length=50, description="Username (3-50 characters)")
+    email: str = Field(..., description="Email address")
+    password: str = Field(..., min_length=6, description="Password (minimum 6 characters)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "john_doe",
+                "email": "john@example.com",
+                "password": "securepassword123"
+            }
+        }
+
+
+class LoginRequest(BaseModel):
+    """User login request"""
+    username: str = Field(..., description="Username or email")
+    password: str = Field(..., description="Password")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "john_doe",
+                "password": "securepassword123"
+            }
+        }
+
+
+class AuthResponse(BaseModel):
+    """Authentication response"""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    user_id: str = Field(..., description="User ID")
+    is_demo: bool = Field(default=False, description="Whether this is a demo account")
+    expires_in: int = Field(..., description="Token expiry time in seconds")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+                "token_type": "bearer",
+                "user_id": "user123",
+                "is_demo": False,
+                "expires_in": 604800
+            }
+        }

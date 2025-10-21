@@ -16,6 +16,7 @@ class ContentState(TypedDict):
     """
     # Input
     url: str
+    user_id: Optional[str]  # User ID for tracking and analytics
     
     # Content extraction
     extracted_text: Optional[str]
@@ -72,12 +73,13 @@ def create_content_repurposing_graph() -> StateGraph:
     return workflow
 
 
-def run_content_repurposing_pipeline(url: str) -> ContentState:
+def run_content_repurposing_pipeline(url: str, user_id: str = None) -> ContentState:
     """
     Executes the complete content repurposing pipeline for a given URL.
     
     Args:
         url (str): The URL to process (YouTube video or webpage)
+        user_id (str, optional): User ID for tracking and analytics
         
     Returns:
         ContentState: Final state with all generated content
@@ -87,6 +89,7 @@ def run_content_repurposing_pipeline(url: str) -> ContentState:
     # Initialize state
     initial_state = ContentState(
         url=url,
+        user_id=user_id,
         extracted_text=None,
         extraction_method=None,
         chunks=None,
