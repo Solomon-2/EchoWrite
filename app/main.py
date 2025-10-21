@@ -23,6 +23,7 @@ from schemas import (
     RegisterRequest, LoginRequest, AuthResponse
 )
 from ai_core.graph import run_content_repurposing_pipeline
+from rate_limiter import RateLimiter
 
 # Load environment variables
 load_dotenv()
@@ -45,6 +46,9 @@ security = HTTPBearer()
 
 # Simple in-memory user storage (replace with database in production)
 users_db = {}
+
+# Initialize rate limiter
+rate_limiter = RateLimiter()
 
 # User management functions
 def hash_password(password: str) -> str:
@@ -254,6 +258,30 @@ async def demo_login():
     )
 
 
+@app.get("/rate-limit/status")
+async def get_rate_limit_status(auth_data: dict = Depends(verify_token)):
+    """Get current rate limit status for the authenticated user"""
+    user_id = auth_data["user_id"]
+    is_demo = auth_data["is_demo"]
+    
+    # Get current usage stats
+    stats = rate_limiter.get_user_stats(user_id)
+    limits = rate_limiter.get_rate_limits_for_user(is_demo)
+    
+    user_tier = "demo" if is_demo else "registered"
+    
+    return {
+        "user_id": user_id,
+        "user_tier": user_tier,
+        "current_usage": stats,
+        "rate_limits": limits,
+        "remaining": {
+            "requests_this_hour": limits["requests_per_hour"] - stats["requests_last_hour"],
+            "requests_today": limits["requests_per_day"] - stats["requests_last_day"]
+        }
+    }
+
+
 @app.post("/repurpose", response_model=RepurposeResponse)
 async def repurpose_content(request: RepurposeRequest, auth_data: dict = Depends(verify_token)):
     """
@@ -265,9 +293,25 @@ async def repurpose_content(request: RepurposeRequest, auth_data: dict = Depends
     - LinkedIn post (150-300 words)
     """
     try:
+        # Extract user info
+        user_id = auth_data["user_id"]
+        is_demo = auth_data["is_demo"]
+        
+        # Check rate limits
+        allowed, error_message = rate_limiter.is_allowed(user_id, is_demo)
+        if not allowed:
+            # Get rate limit info for error response
+            limits = rate_limiter.get_rate_limits_for_user(is_demo)
+            user_tier = "demo" if is_demo else "registered"
+            
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded for {user_tier} users. {error_message} "
+                       f"Limits: {limits['requests_per_hour']}/hour, {limits['requests_per_day']}/day."
+            )
+        
         # Convert Pydantic URL to string
         url = str(request.url)
-        user_id = auth_data["user_id"]
         
         # Run the content repurposing pipeline
         final_state = run_content_repurposing_pipeline(url, user_id)
