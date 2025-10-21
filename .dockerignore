@@ -1,0 +1,5 @@
+# Add to existing .gitignore
+.env
+docker-compose.override.yml
+*.log
+.docker/

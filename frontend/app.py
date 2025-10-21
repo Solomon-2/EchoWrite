@@ -1,10 +1,11 @@
 import json
+import os
 import requests
 import streamlit as st
 from datetime import datetime, timedelta
 
 # Backend configuration
-BACKEND_BASE_URL = "http://127.0.0.1:8080"
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8080")
 REPURPOSE_URL = f"{BACKEND_BASE_URL}/repurpose"
 AUTH_REGISTER_URL = f"{BACKEND_BASE_URL}/auth/register"
 AUTH_LOGIN_URL = f"{BACKEND_BASE_URL}/auth/login"

@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  echowrite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: echowrite_app
+    ports:
+      - "8000:8000"  # Backend API (FastAPI)
+      - "8501:8501"  # Frontend (Streamlit)
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - PYTHONPATH=/app
+      - BACKEND_BASE_URL=http://localhost:8000  # Frontend connects to backend on localhost
+    volumes:
+      - ./data/chromadb:/app/data/chromadb  # Persist ChromaDB data
+      - ./app/data/chromadb:/app/app/data/chromadb  # Also map app data directory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -f http://localhost:8000/health && curl -f http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
