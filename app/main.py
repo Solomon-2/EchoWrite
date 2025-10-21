@@ -3,7 +3,10 @@ FastAPI application for EchoWrite AI content repurposing service
 """
 
 import os
+import json
+import threading
 from datetime import datetime
+import requests
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,6 +21,32 @@ load_dotenv()
 # Verify Groq API key is present
 if not os.getenv("GROQ_API_KEY"):
     raise RuntimeError("GROQ_API_KEY environment variable is not set")
+
+# N8N webhook configuration
+N8N_WEBHOOK_URL = "https://nderitu-wahome.app.n8n.cloud/webhook-test/4d7ff303-fe36-4de4-936c-5c7070afd380"
+
+
+def send_to_webhook(response_data, final_state):
+    """Send response data to n8n webhook in the background (fire and forget)"""
+    try:
+        # Create webhook payload with flattened content structure
+        webhook_payload = {
+            "success": response_data.get("success"),
+            "url": response_data.get("url"),
+            "blog_post": final_state.get("blog_post", ""),
+            "twitter_thread": final_state.get("twitter_thread", []),
+            "linkedin_post": final_state.get("linkedin_post", ""),
+            "extraction_method": response_data.get("extraction_method"),
+            "word_count": response_data.get("word_count"),
+            "processing_time": response_data.get("processing_time"),
+            "current_step": response_data.get("current_step")
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        requests.post(N8N_WEBHOOK_URL, headers=headers, data=json.dumps(webhook_payload), timeout=5)
+    except Exception:
+        # Silently ignore webhook errors
+        pass
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -108,6 +137,9 @@ async def repurpose_content(request: RepurposeRequest):
                 twitter_thread=final_state.get("twitter_thread", []),
                 linkedin_post=final_state.get("linkedin_post", "")
             )
+        
+        # Send to webhook in background (fire and forget)
+        threading.Thread(target=send_to_webhook, args=(response_data, final_state), daemon=True).start()
         
         return RepurposeResponse(**response_data)
         
