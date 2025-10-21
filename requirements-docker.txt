@@ -1,0 +1,16 @@
+# Method A: Minimal requirements (let pip resolve versions)
+fastapi
+uvicorn
+python-multipart
+PyJWT
+passlib[bcrypt]
+langchain-groq
+langgraph
+groq
+pydantic
+requests
+beautifulsoup4
+chromadb
+python-dotenv
+streamlit
+numpy
