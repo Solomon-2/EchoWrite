@@ -33,7 +33,7 @@ if not os.getenv("GROQ_API_KEY"):
     raise RuntimeError("GROQ_API_KEY environment variable is not set")
 
 # N8N webhook configuration
-N8N_WEBHOOK_URL = "https://nderitu-wahome.app.n8n.cloud/webhook-test/4d7ff303-fe36-4de4-936c-5c7070afd380"
+N8N_WEBHOOK_URL = "https://nderitu-wahome.app.n8n.cloud/webhook/4d7ff303-fe36-4de4-936c-5c7070afd380"
 
 # JWT Configuration
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
@@ -117,11 +117,25 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
 def send_to_webhook(response_data, final_state, user_id: str = None):
     """Send response data to n8n webhook in the background (fire and forget)"""
     try:
+        # Get user email from user_id
+        user_email = None
+        if user_id:
+            # Look up user in users_db by user_id
+            for username, user_data in users_db.items():
+                if user_data.get("user_id") == user_id:
+                    user_email = user_data.get("email")
+                    break
+            
+            # Handle demo users (they don't have emails)
+            if not user_email and user_id.startswith("demo_"):
+                user_email = "demo@example.com"
+        
         # Create webhook payload with flattened content structure
         webhook_payload = {
             "success": response_data.get("success"),
             "url": response_data.get("url"),
             "user_id": user_id,
+            "user_email": user_email,
             "blog_post": final_state.get("blog_post", ""),
             "twitter_thread": final_state.get("twitter_thread", []),
             "linkedin_post": final_state.get("linkedin_post", ""),
